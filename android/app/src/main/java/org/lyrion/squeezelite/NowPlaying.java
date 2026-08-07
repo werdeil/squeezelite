@@ -158,7 +158,6 @@ public class NowPlaying {
                     .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
                     .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, title)
                     .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
-                    .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST, artist)
                     .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, artist)
                     .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
                     .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, (long)(duration*1000));
