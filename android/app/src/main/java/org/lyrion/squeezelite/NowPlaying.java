@@ -187,6 +187,12 @@ public class NowPlaying {
      */
     private void scheduleNext(boolean stale) {
         long delay = 0;
+        if (!stale) {
+            // We saw what we were waiting for, so the event that triggered this query is
+            // settled. The retry budget belongs to that event - without this, the steady
+            // 'nothing changed' answers of a webradio poll would spend it instead.
+            retries = 0;
+        }
         if (stale && retries>0) {
             retries--;
             delay = RETRY_DELAY;
