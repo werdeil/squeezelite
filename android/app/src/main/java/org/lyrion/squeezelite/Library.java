@@ -66,6 +66,9 @@ public class Library {
     private long lmsVolumeSendTime;
     private int volumeControl = VOL_SEP;
     private int maxBitrate = 0;
+    // 'client forget' is only sent to LMS when we are the ones synchronizing volume - this
+    // preserves the behaviour from when the JSON-RPC connection was only created for that.
+    private boolean forgetOnStop = false;
     private PlayerService service;
     private VolumeChangeObserver observer;
     private AudioManager audioManager;
@@ -150,9 +153,12 @@ public class Library {
             audioManager = (AudioManager) service.getSystemService(Context.AUDIO_SERVICE);
             androidMaxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         }
+        // The JSON-RPC connection is used both to control LMS (media buttons) and to
+        // synchronize the volume, so is always required.
+        jsonRpc = new JsonRpc(service, server, mac);
+        forgetOnStop = VOL_SYNC==volumeControl;
         if (VOL_SYNC==volumeControl) {
             androidVolume = UNKNOWN_VOL;
-            jsonRpc = new JsonRpc(service, server, mac);
             observer = new VolumeChangeObserver();
             service.getApplicationContext().getContentResolver().registerContentObserver(Settings.System.CONTENT_URI, true, observer);
         }
@@ -212,13 +218,14 @@ public class Library {
             Utils.error("Exception interrupting player thread", e);
         }
         thread = null;
-        if (null != jsonRpc) {
+        if (null != jsonRpc && forgetOnStop) {
             jsonRpc.sendMessage(new String[]{"client", "forget"}, response -> {
                 Utils.debug("Handle 'forget' resp");
                 System.exit(0);
             });
             jsonRpc = null;
         } else {
+            jsonRpc = null;
             System.exit(0);
         }
     }
