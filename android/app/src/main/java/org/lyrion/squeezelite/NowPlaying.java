@@ -50,6 +50,8 @@ public class NowPlaying {
     // If LMS still reports the previous track then try again after this long.
     private static final long RETRY_DELAY = 1500;
     private static final int MAX_RETRIES = 2;
+    // How often to re-read the status whilst a remote stream is playing - see scheduleNext().
+    private static final long REMOTE_POLL_INTERVAL = 30000;
     // Keep the artwork small enough to comfortably fit through a binder transaction.
     private static final int MAX_COVER_SIZE = 384;
 
@@ -64,6 +66,8 @@ public class NowPlaying {
     // Identity of the track currently published, used to detect changes.
     private String trackKey = null;
     private int state = PlaybackStateCompat.STATE_NONE;
+    // Set whilst a remote stream is playing, and we therefore need to poll.
+    private boolean remoteStream = false;
     private String coverUrl = null;
     private Bitmap cover = null;
     private MediaMetadataCompat.Builder metadata = null;
@@ -116,7 +120,7 @@ public class NowPlaying {
         JSONObject result = null==response ? null : response.optJSONObject("result");
         if (null==result) {
             Utils.warn("No status received from server");
-            retry();
+            scheduleNext(true);
             return;
         }
 
@@ -125,7 +129,9 @@ public class NowPlaying {
         JSONObject track = null!=loop && loop.length()>0 ? loop.optJSONObject(0) : null;
 
         if (null==track || "stop".equals(mode)) {
+            remoteStream = false;
             setStopped();
+            scheduleNext(false);
             return;
         }
 
@@ -140,13 +146,12 @@ public class NowPlaying {
 
         String key = title + " " + artist + " " + album + " " + duration + " " + url;
         int newState = "play".equals(mode) ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED;
-        if (key.equals(trackKey)) {
-            // Nothing new - unless the playback state itself changed, LMS may not have caught
-            // up with us yet, so try again shortly.
-            if (newState==state) {
-                retry();
-            }
-        } else {
+        boolean trackChanged = !key.equals(trackKey);
+        boolean stateChanged = newState!=state;
+        // 'remote' comes from the 'x' tag. Only poll whilst actually playing.
+        remoteStream = 0!=track.optInt("remote", 0) && PlaybackStateCompat.STATE_PLAYING==newState;
+
+        if (trackChanged) {
             Utils.debug("New track:" + title + " - " + artist);
             trackKey = key;
             metadata = new MediaMetadataCompat.Builder()
@@ -168,17 +173,30 @@ public class NowPlaying {
         }
 
         setState(newState, (long)(time*1000));
+        scheduleNext(!trackChanged && !stateChanged);
     }
 
     /**
-     * LMS did not (yet) tell us anything new - it can briefly still report the previous track
-     * after we have been told that a new one started. Try again, a couple of times.
+     * Decide when, if ever, to read the status again.
+     *
+     * 'stale' means the status told us nothing new, which after a player event usually means
+     * LMS has not caught up with it yet - so try again, a couple of times.
+     *
+     * Remote streams need polling regardless: the songs within a webradio stream follow one
+     * another without the player ever starting a new track, so there is no event to react to
+     * and the details would otherwise stay frozen on whatever was playing when we tuned in.
      */
-    private void retry() {
-        if (retries>0) {
+    private void scheduleNext(boolean stale) {
+        long delay = 0;
+        if (stale && retries>0) {
             retries--;
-            handler.removeCallbacks(queryTask);
-            handler.postDelayed(queryTask, RETRY_DELAY);
+            delay = RETRY_DELAY;
+        } else if (remoteStream) {
+            delay = REMOTE_POLL_INTERVAL;
+        }
+        handler.removeCallbacks(queryTask);
+        if (delay>0 && !released) {
+            handler.postDelayed(queryTask, delay);
         }
     }
 
