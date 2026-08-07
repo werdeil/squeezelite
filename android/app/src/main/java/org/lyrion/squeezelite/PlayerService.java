@@ -72,6 +72,7 @@ public class PlayerService extends Service {
     private String playerName;
     private MediaSessionCompat mediaSession;
     private MediaSessionCompat.Callback mediaSessionCallback;
+    private volatile NowPlaying nowPlaying;
 
     public PlayerService() {
         handler = new Handler(Looper.getMainLooper());
@@ -176,11 +177,13 @@ public class PlayerService extends Service {
             Intent quitIntent = new Intent(this, PlayerService.class);
             quitIntent.setAction(QUIT_INTENT);
 
+            String track = null==nowPlaying ? null : nowPlaying.getDescription();
             notificationBuilder
                     .setOngoing(true)
                     .setOnlyAlertOnce(true)
                     .setSmallIcon(R.drawable.ic_mono_icon)
                     .setContentTitle(name + (Utils.isEmpty(currentServerAddress) ? "" : (" (" + currentServerAddress +")")))
+                    .setContentText(track)
                     .setCategory(Notification.CATEGORY_SERVICE)
                     .setContentIntent(pendingIntent)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -268,6 +271,14 @@ public class PlayerService extends Service {
                 }
 
                 @Override
+                public void onStop() {
+                    Utils.debug("");
+                    if (null!=lib) {
+                        lib.stopPlayback();
+                    }
+                }
+
+                @Override
                 public void onSkipToNext() {
                     if (null!=lib) {
                         lib.next();
@@ -282,7 +293,9 @@ public class PlayerService extends Service {
 
                 @Override
                 public void onSeekTo(long pos) {
-                    //sendCommand(new String[]{"time", Double.toString(pos/1000.0)});
+                    if (null!=lib) {
+                        lib.seekTo(pos);
+                    }
                 }
 
                 public boolean onMediaButtonEvent(Intent mediaButtonEvent) {
@@ -321,6 +334,15 @@ public class PlayerService extends Service {
         }
         mediaSession.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
         mediaSession.setCallback(mediaSessionCallback);
+        if (Prefs.get(this).getBoolean(Prefs.SEND_TRACK_DETAILS_KEY, Prefs.DEFAULT_SEND_TRACK_DETAILS)) {
+            // The session needs to be active for Android to relay its contents to connected
+            // devices - e.g. as AVRCP metadata for a Bluetooth car stereo or headset. Leave it
+            // inactive when we have nothing to publish, otherwise we would just be advertising
+            // an empty session.
+            mediaSession.setActive(true);
+            nowPlaying = new NowPlaying(this, lib, mediaSession);
+            nowPlaying.update();
+        }
     }
 
     private void stopPlayer() {
@@ -333,11 +355,34 @@ public class PlayerService extends Service {
         }
         sendStatus(false);
         stopTerminateTimer();
+        if (null!=nowPlaying) {
+            nowPlaying.release();
+            nowPlaying = null;
+        }
         lib.stopPlayer(this);
         if (mediaSession != null) {
             mediaSession.setActive(false);
             mediaSession.release();
         }
+    }
+
+    /**
+     * Called (from the player thread) when a new track starts, or playback is paused,
+     * resumed, or stopped.
+     */
+    public void playbackStateChanged() {
+        Utils.debug("");
+        NowPlaying np = nowPlaying;
+        if (null!=np) {
+            handler.post(np::update);
+        }
+    }
+
+    /**
+     * Called by NowPlaying once the details of the current track are known.
+     */
+    public void trackChanged() {
+        updateNotification();
     }
 
     private void sendStatus(boolean running) {
@@ -363,6 +408,8 @@ public class PlayerService extends Service {
             startTerminateTimer(connectionLostTimeout);
         } else {
             stopTerminateTimer();
+            // Now that we know where the server is, read what it is playing.
+            playbackStateChanged();
         }
     }
 

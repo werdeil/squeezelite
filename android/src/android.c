@@ -101,6 +101,33 @@ void send_volume_to_app(u32_t left, u32_t right) {
 	}
 }
 
+/**
+ Inform the app that playback has changed - e.g. a new track has started, or playback
+ has been paused/resumed. The app uses this to re-read the current track's details from
+ LMS, and publish these via its MediaSession (so that they reach connected Bluetooth
+ devices, etc.)
+ */
+void send_playback_state_to_app(void) {
+	if (!jvm || !obj || !clazz) {
+		return;
+	}
+	JNIEnv *env;
+	bool detached = JNI_EDETACHED == (*jvm)->GetEnv(jvm, &env, JNI_VERSION_1_6);
+	if (detached) {
+		if (JNI_OK!=(*jvm)->AttachCurrentThread(jvm, &env, NULL)) {
+			LOG_ERROR("Failed to get attach current thread");
+			return;
+		}
+	}
+	jmethodID method = (*env)->GetMethodID(env, clazz, "playbackStateChanged", "()V");
+	if (method) {
+		(*env)->CallVoidMethod(env, obj, method);
+	}
+	if (detached) {
+		(*jvm)->DetachCurrentThread(jvm);
+	}
+}
+
 void send_connection_state_to_app(const char *address) {
 	if (!jvm || !obj || !clazz) {
 		return;

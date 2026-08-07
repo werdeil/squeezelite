@@ -148,6 +148,12 @@
             app:singleLineTitle="false"/>
         <SwitchPreferenceCompat
             app:iconSpaceReserved="false"
+            app:key="send_track_details"
+            app:summary="@string/send_track_details_summary"
+            app:title="@string/send_track_details"
+            app:singleLineTitle="false"/>
+        <SwitchPreferenceCompat
+            app:iconSpaceReserved="false"
             app:key="autostart_bt"
             app:summary="@string/autostart_bt_summary"
             app:title="@string/autostart_bt"

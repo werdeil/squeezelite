@@ -478,6 +478,7 @@ typedef enum { lERROR = 0, lWARN, lINFO, lDEBUG, lSDEBUG } log_level;
 extern void send_output_state_to_app(u8_t spdif, u8_t dac);
 extern void send_volume_to_app(u32_t left, u32_t right);
 extern void send_connection_state_to_app(const char *address);
+extern void send_playback_state_to_app(void);
 extern char * get_ip_str(const struct sockaddr *sa);
 #else
 const char *logtime(void);

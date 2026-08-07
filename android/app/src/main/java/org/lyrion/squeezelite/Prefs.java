@@ -51,6 +51,7 @@ public class Prefs {
     public static final String AUTOSTART_BT_KEY = "autostart_bt";
     public static final String BT_MAC_ADDRESSES_KEY = "bt_mac_addresses";
     public static final String USE_BT_ID_KEY = "use_bt_id";
+    public static final String SEND_TRACK_DETAILS_KEY = "send_track_details";
     public static int MAX_BITRATE_ALWAYS = 0;
     public static int MAX_BITRATE_WHEN_CELLULAR = 1;
     public static int MAX_BITRATE_WHEN_METERED = 2;
@@ -72,6 +73,7 @@ public class Prefs {
     public static boolean DEFAULT_START_ON_BOOT = false;
     public static String DEFAULT_START_ON_BOOT_DELAY = "0";
     public static boolean DEFAULT_STOP_ON_POWER_OFF = true;
+    public static boolean DEFAULT_SEND_TRACK_DETAILS = true;
 
     static public SharedPreferences get(Context context) {
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
@@ -172,6 +174,12 @@ public class Prefs {
                 editor = sharedPreferences.edit();
             }
             editor.putBoolean(STOP_ON_POWER_OFF_KEY, DEFAULT_STOP_ON_POWER_OFF);
+        }
+        if (!sharedPreferences.contains(SEND_TRACK_DETAILS_KEY)) {
+            if (null==editor) {
+                editor = sharedPreferences.edit();
+            }
+            editor.putBoolean(SEND_TRACK_DETAILS_KEY, DEFAULT_SEND_TRACK_DETAILS);
         }
         if (editor!=null) {
             editor.apply();

@@ -293,6 +293,9 @@ static void process_strm(u8_t *pkt, int len) {
 		stream_disconnect();
 		sendSTAT("STMf", 0);
 		buf_flush(streambuf);
+#ifdef ANDROID
+		send_playback_state_to_app();
+#endif
 		break;
 	case 'f': 
 		{
@@ -319,6 +322,9 @@ static void process_strm(u8_t *pkt, int len) {
 			UNLOCK_O;
 			if (!interval) sendSTAT("STMp", 0);
 			LOG_DEBUG("pause interval: %u", interval);
+#ifdef ANDROID
+			if (!interval) send_playback_state_to_app();
+#endif
 		}
 		break;
 	case 'a':
@@ -341,6 +347,9 @@ static void process_strm(u8_t *pkt, int len) {
 
 			LOG_DEBUG("unpause at: %u now: %u", jiffies, gettime_ms());
 			sendSTAT("STMr", 0);
+#ifdef ANDROID
+			send_playback_state_to_app();
+#endif
 		}
 		break;
 	case 's':
@@ -760,7 +769,13 @@ static void slimproto_run() {
 
 			// send packets once locks released as packet sending can block
 			if (_sendDSCO) sendDSCO(disconnect_code);
-			if (_sendSTMs) sendSTAT("STMs", 0);
+			if (_sendSTMs) {
+				sendSTAT("STMs", 0);
+#ifdef ANDROID
+				// A new track has started playing - let the app update its MediaSession
+				send_playback_state_to_app();
+#endif
+			}
 			if (_sendSTMd) sendSTAT("STMd", 0);
 			if (_sendSTMt) sendSTAT("STMt", 0);
 			if (_sendSTMl) sendSTAT("STMl", 0);

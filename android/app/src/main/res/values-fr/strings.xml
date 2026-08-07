@@ -41,6 +41,8 @@
     <string name="autostart_bt">Démarrer la platine à la connexion</string>
     <string name="autostart_bt_summary">Lorsqu\'un des appareils Bluetooth configurés se connecte, démarre la platine en utilisant son ID et son nom.</string>
     <string name="bt_mac_addresses">Démarrage auto à la connexion de l\'appareil</string>
+    <string name="send_track_details">Envoyer les infos du morceau</string>
+    <string name="send_track_details_summary">Envoie les informations du morceau en cours (titre, artiste, album, pochette) à l\'appareil connecté, afin qu\'il puisse les afficher. Également utilisé pour l\'écran de verrouillage et Android Auto.</string>
     <string name="use_bt_id">Utiliser l\'ID et le nom</string>
     <string name="use_bt_id_summary">Utilise le nom et l\'ID de l\'appareil connecté comme nom et ID sur le serveur Lyrion.</string>
     <string name="none">Aucun</string>
