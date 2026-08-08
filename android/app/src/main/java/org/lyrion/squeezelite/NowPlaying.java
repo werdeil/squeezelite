@@ -144,7 +144,10 @@ public class NowPlaying {
         double time = result.optDouble("time", 0);
         String url = coverUrl(track);
 
-        String key = title + " " + artist + " " + album + " " + duration + " " + url;
+        // Deliberately not including the artwork URL: LMS mints a fresh, synthetic coverid for
+        // a remote stream on every request, so a volatile URL would make each poll of a
+        // webradio look like a new track.
+        String key = title + " " + artist + " " + album + " " + duration;
         int newState = "play".equals(mode) ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED;
         boolean trackChanged = !key.equals(trackKey);
         boolean stateChanged = newState!=state;
