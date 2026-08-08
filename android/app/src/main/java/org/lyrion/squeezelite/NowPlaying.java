@@ -135,9 +135,18 @@ public class NowPlaying {
             return;
         }
 
-        String title = firstOf(track, "title", "remote_title");
+        boolean remote = 0!=track.optInt("remote", 0);
+        String title = firstOf(track, "title");
         String artist = firstOf(track, "artist", "trackartist", "albumartist", "artist_name");
-        String album = firstOf(track, "album", "remote_title");
+        // For a remote stream 'album' is not set, but remote_title names the station.
+        String album = remote ? firstOf(track, "remote_title") : firstOf(track, "album");
+        if (remote && (Utils.isEmpty(title) || title.equals(artist))) {
+            // Not every station sends usable metadata - one was seen putting the same
+            // changing number in both title and artist. Showing the station on its own beats
+            // showing that. A station name is the one thing LMS always knows for a stream.
+            title = album;
+            artist = "";
+        }
         // 'duration' is per-track for local files, but the status itself is more reliable for
         // remote streams that LMS knows the length of.
         double duration = track.optDouble("duration", result.optDouble("duration", 0));
@@ -151,8 +160,8 @@ public class NowPlaying {
         int newState = "play".equals(mode) ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED;
         boolean trackChanged = !key.equals(trackKey);
         boolean stateChanged = newState!=state;
-        // 'remote' comes from the 'x' tag. Only poll whilst actually playing.
-        remoteStream = 0!=track.optInt("remote", 0) && PlaybackStateCompat.STATE_PLAYING==newState;
+        // Only poll whilst actually playing.
+        remoteStream = remote && PlaybackStateCompat.STATE_PLAYING==newState;
 
         if (trackChanged) {
             Utils.debug("New track:" + title + " - " + artist);
@@ -261,13 +270,16 @@ public class NowPlaying {
         if (null==base) {
             return "";
         }
-        String coverId = track.optString("coverid", "");
-        if (!Utils.isEmpty(coverId)) {
-            return base + "music/" + coverId + "/cover.jpg";
-        }
+        // artwork_url before coverid: a remote stream gets a stable artwork_url pointing at
+        // the station logo, but a synthetic coverid that changes on every request. Local
+        // tracks generally have only a coverid.
         String url = track.optString("artwork_url", "");
         if (!Utils.isEmpty(url)) {
             return url.startsWith("http") ? url : (base + (url.startsWith("/") ? url.substring(1) : url));
+        }
+        String coverId = track.optString("coverid", "");
+        if (!Utils.isEmpty(coverId)) {
+            return base + "music/" + coverId + "/cover.jpg";
         }
         // Fall back to whatever LMS thinks this player's current cover is - this covers most
         // remote streams.
