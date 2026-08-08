@@ -167,7 +167,9 @@ public class Library {
             service.getApplicationContext().getContentResolver().registerContentObserver(Settings.System.CONTENT_URI, true, observer);
         }
         int volumeToRestore = prefs.getBoolean(Prefs.RESTORE_VOLUME_KEY, Prefs.DEFAULT_RESTORE_VOLUME) ? (int)prefs.getLong(Prefs.VOLUME_KEY, -1) : -1;
-        if (volumeToRestore>=0) {
+        // Never restore a muted volume - see stopPlayer(). This also clears out a zero stored
+        // by a previous version.
+        if (volumeToRestore>0) {
             Utils.info("Restore volume:" + volumeToRestore);
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, volumeToRestore, 0);
         }
@@ -198,7 +200,11 @@ public class Library {
 
         SharedPreferences prefs = Prefs.get(context);
         androidVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-        if (androidVolume>=0) {
+        // Don't store a muted volume. When playback stops, LMS ramps its gain down to zero,
+        // and in the synchronized mode that ramp is mirrored onto the device volume - so what
+        // we read here is often the tail of that fade rather than the listening level. Storing
+        // it means the next start restores a silent player. Keep the previous value instead.
+        if (androidVolume>0) {
             Utils.info("Store volume:" + androidVolume);
             SharedPreferences.Editor editor = prefs.edit();
             editor.putLong(Prefs.VOLUME_KEY, androidVolume);
