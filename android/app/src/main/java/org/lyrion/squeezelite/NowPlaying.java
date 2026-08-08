@@ -245,8 +245,9 @@ public class NowPlaying {
             // Only use this if it is still the cover we are interested in.
             if (!released && null!=bitmap && url.equals(coverUrl)) {
                 cover = bitmap;
+                // Only the session carries the artwork - the notification shows the text
+                // description, which has not changed, so there is nothing to rebuild there.
                 publishMetadata();
-                service.trackChanged();
             }
         });
     }
