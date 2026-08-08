@@ -122,6 +122,12 @@ void send_playback_state_to_app(void) {
 	jmethodID method = (*env)->GetMethodID(env, clazz, "playbackStateChanged", "()V");
 	if (method) {
 		(*env)->CallVoidMethod(env, obj, method);
+	} else {
+		/* A failed GetMethodID leaves a NoSuchMethodError pending, and the next JNI call
+		   from this thread would then abort the VM. This happens when the native library
+		   is newer than the Java code - i.e. a stale build. */
+		(*env)->ExceptionClear(env);
+		LOG_ERROR("playbackStateChanged not found");
 	}
 	if (detached) {
 		(*jvm)->DetachCurrentThread(jvm);
