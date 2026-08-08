@@ -206,6 +206,7 @@ public class NowPlaying {
     }
 
     private void setStopped() {
+        Utils.debug("");
         boolean changed = null!=trackKey;
         trackKey = null;
         description = null;
