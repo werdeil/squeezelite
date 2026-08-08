@@ -41,6 +41,9 @@ import org.json.JSONObject;
 
 public class Library {
     private static final String[] PREV_COMMAND = {"button", "jump_rew"};
+    private static final String[] PLAY_COMMAND = {"pause", "0"};
+    private static final String[] PAUSE_COMMAND = {"pause", "1"};
+    // For the sources that cannot say which of the two they want - PLAY_PAUSE, HEADSETHOOK.
     private static final String[] TOGGLE_PLAY_PAUSE_COMMAND = {"pause"};
     private static final String[] NEXT_COMMAND = {"playlist", "index", "+1"};
     private static final String[] STOP_COMMAND = {"stop"};
@@ -358,6 +361,14 @@ public class Library {
 
     public void prev() {
         sendCommand(PREV_COMMAND);
+    }
+
+    public void play() {
+        sendCommand(PLAY_COMMAND);
+    }
+
+    public void pause() {
+        sendCommand(PAUSE_COMMAND);
     }
 
     public void playPause() {

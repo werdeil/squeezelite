@@ -258,7 +258,7 @@ public class PlayerService extends Service {
                 public void onPlay() {
                     Utils.debug("");
                     if (null!=lib) {
-                        lib.playPause();
+                        lib.play();
                     }
                 }
 
@@ -266,7 +266,7 @@ public class PlayerService extends Service {
                 public void onPause() {
                     Utils.debug("");
                     if (null!=lib) {
-                        lib.playPause();
+                        lib.pause();
                     }
                 }
 
@@ -298,30 +298,39 @@ public class PlayerService extends Service {
                     }
                 }
 
+                /**
+                 * Handle key events ourselves. The default dispatch routes them using the
+                 * actions declared in the playback state, so it does nothing at all when no
+                 * state is published - which is the case when track details are turned off.
+                 *
+                 * Only ACTION_DOWN is acted on, and consumed, so that the event does not also
+                 * reach the transport callbacks. ACTION_UP falls through to super, which
+                 * ignores it.
+                 */
+                @Override
                 public boolean onMediaButtonEvent(Intent mediaButtonEvent) {
-                    Utils.debug("");
                     KeyEvent event = mediaButtonEvent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
-                    if (lib!=null && event!=null && 1==event.getAction()) {
+                    if (null!=lib && null!=event && KeyEvent.ACTION_DOWN==event.getAction()) {
                         Utils.debug("KeyCode:" + event.getKeyCode());
                         switch (event.getKeyCode()) {
                             case KeyEvent.KEYCODE_MEDIA_PLAY:
-                                Utils.debug("Play");
-                                lib.playPause();
+                                lib.play();
                                 return true;
                             case KeyEvent.KEYCODE_MEDIA_PAUSE:
-                                Utils.debug("Pause");
-                                lib.playPause();
+                                lib.pause();
                                 return true;
+                            case KeyEvent.KEYCODE_MEDIA_STOP:
+                                lib.stopPlayback();
+                                return true;
+                            // These do not say which of the two is wanted, so toggle.
                             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                                Utils.debug("Play/pause");
+                            case KeyEvent.KEYCODE_HEADSETHOOK:
                                 lib.playPause();
                                 return true;
                             case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
-                                Utils.debug("Prev");
                                 lib.prev();
                                 return true;
                             case KeyEvent.KEYCODE_MEDIA_NEXT:
-                                Utils.debug("Next");
                                 lib.next();
                                 return true;
                             default:
