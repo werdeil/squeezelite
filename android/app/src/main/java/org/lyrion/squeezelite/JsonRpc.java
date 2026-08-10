@@ -40,13 +40,12 @@ public class JsonRpc {
 
     private static class Request extends JsonObjectRequest {
         public Request(String url, @Nullable JSONObject request, Response.Listener<JSONObject> responseListener) {
-            // Report failures to the response listener (as a null response) so that callers
-            // are not left waiting for a reply that will never arrive.
-            super(Request.Method.POST, url, request, responseListener,
-                  null==responseListener ? null : error -> {
-                      Utils.warn("Request failed - " + error);
-                      responseListener.onResponse(null);
-                  });
+            super(Request.Method.POST, url, request, responseListener, error -> {
+                Utils.warn("Request failed - " + error);
+                if (null!=responseListener) {
+                    responseListener.onResponse(null);
+                }
+            });
         }
     }
 

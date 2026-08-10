@@ -72,7 +72,7 @@ public class Library {
     private PlayerService service;
     private VolumeChangeObserver observer;
     private AudioManager audioManager;
-    private JsonRpc jsonRpc;
+    private volatile JsonRpc jsonRpc;
     private String ipAddress;
 
     private class VolumeChangeObserver extends ContentObserver {
@@ -225,7 +225,6 @@ public class Library {
             });
             jsonRpc = null;
         } else {
-            jsonRpc = null;
             System.exit(0);
         }
     }
@@ -349,8 +348,11 @@ public class Library {
     }
 
     public void sendCommand(String[] cmd) {
-        if (null!=jsonRpc) {
-            jsonRpc.sendMessage(cmd);
+        // Not synchronized (called from the media session), so read the field once - stopPlayer()
+        // can clear it at any point.
+        JsonRpc rpc = jsonRpc;
+        if (null!=rpc) {
+            rpc.sendMessage(cmd);
         }
     }
 
