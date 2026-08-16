@@ -39,13 +39,8 @@ import java.util.Set;
 public class CommandReceiver extends BroadcastReceiver {
     private static final String START = "org.lyrion.squeezelite.START";
     private static final String STOP = "org.lyrion.squeezelite.STOP";
-    // Earbuds put back in their case do not just drop the audio connection - they
-    // re-establish it for about a second before dropping it for good. Ignore a connection
-    // that closely follows a disconnection, so that flap does not start the player again.
     private static final long IGNORE_RECONNECT_AFTER = 5000;
 
-    // Best effort: this is lost if the process is restarted between the two events, which
-    // only means we fall back to starting the player as before.
     private static long lastDisconnect = 0;
 
     @Override
