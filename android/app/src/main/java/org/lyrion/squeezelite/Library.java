@@ -43,7 +43,6 @@ public class Library {
     private static final String[] PREV_COMMAND = {"button", "jump_rew"};
     private static final String[] PLAY_COMMAND = {"pause", "0"};
     private static final String[] PAUSE_COMMAND = {"pause", "1"};
-    // For the sources that cannot say which of the two they want - PLAY_PAUSE, HEADSETHOOK.
     private static final String[] TOGGLE_PLAY_PAUSE_COMMAND = {"pause"};
     private static final String[] NEXT_COMMAND = {"playlist", "index", "+1"};
     private static final String[] STOP_COMMAND = {"stop"};
@@ -75,8 +74,6 @@ public class Library {
     private long lmsVolumeSendTime;
     private int volumeControl = VOL_SEP;
     private int maxBitrate = 0;
-    // 'client forget' is only sent to LMS when we are the ones synchronizing volume - this
-    // preserves the behaviour from when the JSON-RPC connection was only created for that.
     private boolean forgetOnStop = false;
     private volatile PlayerService service;
     private VolumeChangeObserver observer;
@@ -162,8 +159,6 @@ public class Library {
             audioManager = (AudioManager) service.getSystemService(Context.AUDIO_SERVICE);
             androidMaxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         }
-        // The JSON-RPC connection is used to control LMS (media buttons, volume sync) and to
-        // read the details of the current track, so is always required.
         jsonRpc = new JsonRpc(service, server, mac);
         forgetOnStop = VOL_SYNC==volumeControl;
         if (VOL_SYNC==volumeControl) {
@@ -344,15 +339,10 @@ public class Library {
         isInitialPower = false;
     }
 
-    /**
-     * Called from the native code whenever playback changes - a new track has started, or
-     * playback has been paused, resumed, or stopped.
-     */
+    // Called from C code when a track starts, or playback is paused, resumed, or stopped
     @Keep
     public void playbackStateChanged() {
         Utils.debug("");
-        // Not synchronized - this is called from the slimproto thread, and must not block
-        // whilst the player is being stopped.
         PlayerService svc = service;
         if (null!=svc) {
             svc.playbackStateChanged();
@@ -388,17 +378,12 @@ public class Library {
     }
 
     public void sendCommand(String[] cmd) {
-        // Not synchronized (called from the media session), so read the field once - stopPlayer()
-        // can clear it at any point.
         JsonRpc rpc = jsonRpc;
         if (null!=rpc) {
             rpc.sendMessage(cmd);
         }
     }
 
-    /**
-     * Ask LMS for this player's status, including the details of the current track.
-     */
     public void getStatus(String tags, Response.Listener<JSONObject> listener) {
         if (null==jsonRpc) {
             listener.onResponse(null);

@@ -32,27 +32,20 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Reads the details of the track that Lyrion is currently playing, and publishes these -
- * together with the playback state - into the app's MediaSession.
- *
- * Android relays the contents of an active MediaSession to whatever is interested in it,
- * which includes the AVRCP metadata sent to a connected Bluetooth device (car stereo,
- * headphones, speaker, ...), Android Auto, the lock screen, and Wear OS. Up until now the
- * MediaSession was only used to *receive* commands from such devices, this adds the
- * opposite direction.
+ * Reads the details of the track LMS is playing, and publishes these - with the playback
+ * state - into the MediaSession. Android relays an active session on to connected devices,
+ * e.g. as AVRCP metadata for a BT car stereo, and to Android Auto, the lock screen, etc.
  */
 public class NowPlaying {
     // artist, album, duration, coverid, artwork url, remote stream title, is-remote
     private static final String TAGS = "tags:aldcKNx";
-    // Wait a little before querying, so that LMS has settled on the new track, and so that
-    // a burst of events only results in a single query.
+    // Let LMS settle on the new track, and coalesce a burst of events into a single query
     private static final long QUERY_DELAY = 250;
-    // If LMS still reports the previous track then try again after this long.
+    // If LMS still reports the previous track then try again after this long
     private static final long RETRY_DELAY = 1500;
     private static final int MAX_RETRIES = 2;
-    // How often to re-read the status whilst a remote stream is playing - see scheduleNext().
     private static final long REMOTE_POLL_INTERVAL = 30000;
-    // Keep the artwork small enough to comfortably fit through a binder transaction.
+    // Keep the artwork small enough to comfortably fit through a binder transaction
     private static final int MAX_COVER_SIZE = 384;
 
     private final Library lib;
@@ -63,10 +56,8 @@ public class NowPlaying {
 
     private boolean released = false;
     private int retries = 0;
-    // Identity of the track currently published, used to detect changes.
     private String trackKey = null;
     private int state = PlaybackStateCompat.STATE_NONE;
-    // Set whilst a remote stream is playing, and we therefore need to poll.
     private boolean remoteStream = false;
     private String coverUrl = null;
     private Bitmap cover = null;
@@ -79,9 +70,6 @@ public class NowPlaying {
         this.session = session;
     }
 
-    /**
-     * Something happened that may have changed what is playing - re-read the details from LMS.
-     */
     public void update() {
         if (released) {
             return;
@@ -98,9 +86,6 @@ public class NowPlaying {
         coverUrl = null;
     }
 
-    /**
-     * Short 'Title - Artist' description of the current track, or null if nothing is known.
-     */
     public String getDescription() {
         return description;
     }
@@ -138,29 +123,25 @@ public class NowPlaying {
         boolean remote = 0!=track.optInt("remote", 0);
         String title = firstOf(track, "title");
         String artist = firstOf(track, "artist", "trackartist", "albumartist", "artist_name");
-        // For a remote stream 'album' is not set, but remote_title names the station.
+        // For a remote stream 'album' is not set, but remote_title names the station
         String album = remote ? firstOf(track, "remote_title") : firstOf(track, "album");
         if (remote && (Utils.isEmpty(title) || title.equals(artist))) {
-            // Not every station sends usable metadata - one was seen putting the same
-            // changing number in both title and artist. Showing the station on its own beats
-            // showing that. A station name is the one thing LMS always knows for a stream.
+            // Not every station sends usable metadata - one was seen putting the same changing
+            // number in both title and artist. The station name is all LMS always knows.
             title = album;
             artist = "";
         }
-        // 'duration' is per-track for local files, but the status itself is more reliable for
-        // remote streams that LMS knows the length of.
+        // Per-track for local files, but the status itself is better for remote streams
         double duration = track.optDouble("duration", result.optDouble("duration", 0));
         double time = result.optDouble("time", 0);
         String url = coverUrl(track);
 
-        // Deliberately not including the artwork URL: LMS mints a fresh, synthetic coverid for
-        // a remote stream on every request, so a volatile URL would make each poll of a
-        // webradio look like a new track.
+        // No artwork URL here - LMS mints a fresh coverid for a remote stream on every request,
+        // so that would make each poll of a webradio look like a new track
         String key = title + " " + artist + " " + album + " " + duration;
         int newState = "play".equals(mode) ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED;
         boolean trackChanged = !key.equals(trackKey);
         boolean stateChanged = newState!=state;
-        // Only poll whilst actually playing.
         remoteStream = remote && PlaybackStateCompat.STATE_PLAYING==newState;
 
         if (trackChanged) {
@@ -187,22 +168,14 @@ public class NowPlaying {
         scheduleNext(!trackChanged && !stateChanged);
     }
 
-    /**
-     * Decide when, if ever, to read the status again.
-     *
-     * 'stale' means the status told us nothing new, which after a player event usually means
-     * LMS has not caught up with it yet - so try again, a couple of times.
-     *
-     * Remote streams need polling regardless: the songs within a webradio stream follow one
-     * another without the player ever starting a new track, so there is no event to react to
-     * and the details would otherwise stay frozen on whatever was playing when we tuned in.
-     */
+    // 'stale' means nothing new was reported, which after a player event usually means LMS has
+    // not caught up with it yet. A remote stream needs polling regardless - its songs follow
+    // one another without the player ever starting a new track, so there is no event for them.
     private void scheduleNext(boolean stale) {
         long delay = 0;
         if (!stale) {
-            // We saw what we were waiting for, so the event that triggered this query is
-            // settled. The retry budget belongs to that event - without this, the steady
-            // 'nothing changed' answers of a webradio poll would spend it instead.
+            // The retry budget belongs to the event we were waiting for, which is now settled -
+            // without this the 'nothing changed' answers of a webradio poll would spend it
             retries = 0;
         }
         if (stale && retries>0) {
@@ -255,11 +228,10 @@ public class NowPlaying {
             return;
         }
         lib.fetchImage(url, MAX_COVER_SIZE, bitmap -> {
-            // Only use this if it is still the cover we are interested in.
+            // Only use this if it is still the cover we are interested in
             if (!released && null!=bitmap && url.equals(coverUrl)) {
                 cover = bitmap;
-                // Only the session carries the artwork - the notification shows the text
-                // description, which has not changed, so there is nothing to rebuild there.
+                // Only the session carries the artwork, so the notification needs no rebuild
                 publishMetadata();
             }
         });
@@ -270,9 +242,8 @@ public class NowPlaying {
         if (null==base) {
             return "";
         }
-        // artwork_url before coverid: a remote stream gets a stable artwork_url pointing at
-        // the station logo, but a synthetic coverid that changes on every request. Local
-        // tracks generally have only a coverid.
+        // artwork_url before coverid - a remote stream gets a stable artwork_url, but a
+        // synthetic coverid that changes on every request. Local tracks only have a coverid.
         String url = track.optString("artwork_url", "");
         if (!Utils.isEmpty(url)) {
             return url.startsWith("http") ? url : (base + (url.startsWith("/") ? url.substring(1) : url));
@@ -281,8 +252,7 @@ public class NowPlaying {
         if (!Utils.isEmpty(coverId)) {
             return base + "music/" + coverId + "/cover.jpg";
         }
-        // Fall back to whatever LMS thinks this player's current cover is - this covers most
-        // remote streams.
+        // Fall back to whatever LMS thinks this player's current cover is
         String mac = lib.getMac();
         return Utils.isEmpty(mac) ? "" : (base + "music/current/cover.jpg?player=" + mac);
     }

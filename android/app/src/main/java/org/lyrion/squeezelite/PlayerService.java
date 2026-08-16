@@ -298,15 +298,8 @@ public class PlayerService extends Service {
                     }
                 }
 
-                /**
-                 * Handle key events ourselves. The default dispatch routes them using the
-                 * actions declared in the playback state, so it does nothing at all when no
-                 * state is published - which is the case when track details are turned off.
-                 *
-                 * Only ACTION_DOWN is acted on, and consumed, so that the event does not also
-                 * reach the transport callbacks. ACTION_UP falls through to super, which
-                 * ignores it.
-                 */
+                // Act on ACTION_DOWN, and consume it, so that the event does not also reach the
+                // transport callbacks above. ACTION_UP falls through to super, which ignores it.
                 @Override
                 public boolean onMediaButtonEvent(Intent mediaButtonEvent) {
                     KeyEvent event = mediaButtonEvent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
@@ -322,7 +315,7 @@ public class PlayerService extends Service {
                             case KeyEvent.KEYCODE_MEDIA_STOP:
                                 lib.stopPlayback();
                                 return true;
-                            // These do not say which of the two is wanted, so toggle.
+                            // These do not say which of the two is wanted, so toggle
                             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
                             case KeyEvent.KEYCODE_HEADSETHOOK:
                                 lib.playPause();
@@ -344,10 +337,8 @@ public class PlayerService extends Service {
         mediaSession.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
         mediaSession.setCallback(mediaSessionCallback);
         if (Prefs.get(this).getBoolean(Prefs.SEND_TRACK_DETAILS_KEY, Prefs.DEFAULT_SEND_TRACK_DETAILS)) {
-            // The session needs to be active for Android to relay its contents to connected
-            // devices - e.g. as AVRCP metadata for a Bluetooth car stereo or headset. Leave it
-            // inactive when we have nothing to publish, otherwise we would just be advertising
-            // an empty session.
+            // Only activate the session when there is something to publish - Android will not
+            // relay its contents to connected devices otherwise
             mediaSession.setActive(true);
             nowPlaying = new NowPlaying(this, lib, mediaSession);
             nowPlaying.update();
@@ -375,10 +366,6 @@ public class PlayerService extends Service {
         }
     }
 
-    /**
-     * Called (from the player thread) when a new track starts, or playback is paused,
-     * resumed, or stopped.
-     */
     public void playbackStateChanged() {
         Utils.debug("");
         NowPlaying np = nowPlaying;
@@ -387,9 +374,6 @@ public class PlayerService extends Service {
         }
     }
 
-    /**
-     * Called by NowPlaying once the details of the current track are known.
-     */
     public void trackChanged() {
         updateNotification();
     }
@@ -417,7 +401,7 @@ public class PlayerService extends Service {
             startTerminateTimer(connectionLostTimeout);
         } else {
             stopTerminateTimer();
-            // Now that we know where the server is, read what it is playing.
+            // Now that we know where the server is, read what it is playing
             playbackStateChanged();
         }
     }

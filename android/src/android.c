@@ -101,12 +101,6 @@ void send_volume_to_app(u32_t left, u32_t right) {
 	}
 }
 
-/**
- Inform the app that playback has changed - e.g. a new track has started, or playback
- has been paused/resumed. The app uses this to re-read the current track's details from
- LMS, and publish these via its MediaSession (so that they reach connected Bluetooth
- devices, etc.)
- */
 void send_playback_state_to_app(void) {
 	if (!jvm || !obj || !clazz) {
 		return;
@@ -123,9 +117,8 @@ void send_playback_state_to_app(void) {
 	if (method) {
 		(*env)->CallVoidMethod(env, obj, method);
 	} else {
-		/* A failed GetMethodID leaves a NoSuchMethodError pending, and the next JNI call
-		   from this thread would then abort the VM. This happens when the native library
-		   is newer than the Java code - i.e. a stale build. */
+		// A failed GetMethodID leaves an exception pending, and the next JNI call from this
+		// thread would then abort the VM. Happens if the native library is newer than the java.
 		(*env)->ExceptionClear(env);
 		LOG_ERROR("playbackStateChanged not found");
 	}

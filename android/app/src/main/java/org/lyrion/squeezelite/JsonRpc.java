@@ -66,9 +66,6 @@ public class JsonRpc {
         return mac;
     }
 
-    /**
-     * Base URL of the server, with a trailing '/' - e.g. "http://192.168.1.2:9000/"
-     */
     public String getBaseUrl() {
         return "http://" + server.ip + ":" + server.port + "/";
     }
