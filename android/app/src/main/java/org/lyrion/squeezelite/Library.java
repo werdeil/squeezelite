@@ -66,8 +66,6 @@ public class Library {
     private long lmsVolumeSendTime;
     private int volumeControl = VOL_SEP;
     private int maxBitrate = 0;
-    // 'client forget' is only sent to LMS when we are the ones synchronizing volume - this
-    // preserves the behaviour from when the JSON-RPC connection was only created for that.
     private boolean forgetOnStop = false;
     private PlayerService service;
     private VolumeChangeObserver observer;
@@ -153,8 +151,6 @@ public class Library {
             audioManager = (AudioManager) service.getSystemService(Context.AUDIO_SERVICE);
             androidMaxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         }
-        // The JSON-RPC connection is used both to control LMS (media buttons) and to
-        // synchronize the volume, so is always required.
         jsonRpc = new JsonRpc(service, server, mac);
         forgetOnStop = VOL_SYNC==volumeControl;
         if (VOL_SYNC==volumeControl) {
@@ -348,8 +344,6 @@ public class Library {
     }
 
     public void sendCommand(String[] cmd) {
-        // Not synchronized (called from the media session), so read the field once - stopPlayer()
-        // can clear it at any point.
         JsonRpc rpc = jsonRpc;
         if (null!=rpc) {
             rpc.sendMessage(cmd);
