@@ -22,6 +22,7 @@ package org.lyrion.squeezelite;
 
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -54,6 +55,43 @@ public class CommandReceiver extends BroadcastReceiver {
             context.stopService(new Intent(context, PlayerService.class));
         } else if (act.equals(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)) {
             handleBtIntent(context, intent);
+        } else if (act.equals(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)) {
+            handleHandsFreeIntent(context, intent);
+        }
+    }
+
+    /**
+     * Android Auto (wired or wireless) does not send audio over Bluetooth, so the car never shows
+     * up in the A2DP handling above. It does connect as a hands-free (calls) device when Android
+     * Auto starts, and disconnects when it stops - so that is used as the start/stop trigger.
+     */
+    private void handleHandsFreeIntent(Context context, Intent intent) {
+        if (!Prefs.get(context).getBoolean(Prefs.AUTOSTART_ANDROID_AUTO_KEY, false)) {
+            return;
+        }
+        BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+        if (device == null) {
+            return;
+        }
+        int state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1);
+        if (BluetoothProfile.STATE_CONNECTED != state && BluetoothProfile.STATE_DISCONNECTED != state) {
+            Utils.debug("Ignoring hands-free state " + state);
+            return;
+        }
+        Set<String> macs = Prefs.get(context).getStringSet(Prefs.BT_MAC_ADDRESSES_KEY, null);
+        if (null==macs || !macs.contains(device.getAddress())) {
+            Utils.debug("Not a configured BT MAC");
+            return;
+        }
+        boolean running = Utils.isPlayerRunning(context);
+        if (BluetoothProfile.STATE_CONNECTED == state) {
+            // A device that also connects for audio is (re)started by the A2DP handling - do not
+            // start it a second time.
+            if (!running) {
+                startService(context);
+            }
+        } else if (running) {
+            context.stopService(new Intent(context, PlayerService.class));
         }
     }
 
