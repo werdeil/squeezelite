@@ -48,4 +48,6 @@
     <string name="none">Aucun</string>
     <string name="stop_on_power_off">"Arrêt à l'extinction"</string>
     <string name="stop_on_power_off_summary">"Arrêter l'application lorsque la platine est éteinte via Lyrion."</string>
+    <string name="audio_focus">Utiliser le focus audio</string>
+    <string name="audio_focus_summary">Prend le focus audio Android pendant la lecture, et met en pause lorsqu\'une autre application (par ex. un appel téléphonique) le prend. Nécessaire pour que le son soit envoyé à Android Auto.</string>
 </resources>
