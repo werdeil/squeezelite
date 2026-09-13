@@ -49,7 +49,14 @@ public class AudioFocus {
     // prompt) so should be resumed when it is returned
     private boolean pausedByLoss = false;
 
-    private final AudioManager.OnAudioFocusChangeListener listener = focusChange -> {
+    private final AudioManager.OnAudioFocusChangeListener listener = this::onFocusChange;
+
+    public AudioFocus(Context context, Library lib) {
+        this.audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        this.lib = lib;
+    }
+
+    private void onFocusChange(int focusChange) {
         Utils.debug("focusChange:" + focusChange);
         switch (focusChange) {
             case AudioManager.AUDIOFOCUS_GAIN:
@@ -78,11 +85,6 @@ public class AudioFocus {
             default:
                 break;
         }
-    };
-
-    public AudioFocus(Context context, Library lib) {
-        this.audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        this.lib = lib;
     }
 
     /** Playback is starting (or resuming) - take focus. Failure to get it does not stop play. */
