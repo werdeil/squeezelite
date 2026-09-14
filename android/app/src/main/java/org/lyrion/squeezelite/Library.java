@@ -50,6 +50,9 @@ public class Library {
     // Timeout after which Squeezelite will close audio stream
     static final int STREAM_IDLE_TIMEOUT = 30000;
     static long MIN_LMS_VOLUME_UPDATE_TIME = 750;
+    // LMS fades its volume in steps when pausing and resuming. Wait this long before acting on a
+    // volume it sends, so that a fade is decided upon once, when it has finished.
+    static final long LMS_VOLUME_SETTLE_TIME = 200;
     // received volume values for 0..100
     static int[] LMS_VOLS = new int[]{0,16,18,22,26,31,36,43,51,61,72,85,101,120,142,168,200,237,281,333,395,468,555,658,781,926,980,1037,1098,1162,1230,1302,1378,1458,1543,1634,1729,1830,1937,2050,2048,2304,2304,2560,2816,2816,3072,3328,3328,3584,3840,4096,4352,4608,4864,5120,5376,5632,6144,6400,6656,7168,7680,7936,8448,8960,9472,9984,10752,11264,12032,12544,13312,14080,14848,15872,16640,17664,18688,19968,20992,22272,23552,24832,26368,27904,29696,31232,33024,35072,37120,39424,41728,44032,46592,49408,52224,55296,58624,61952,65536};
     static final int UNKNOWN_VOL = -100000;
@@ -75,6 +78,9 @@ public class Library {
     private int volumeControl = VOL_SEP;
     // Whether the player is outputting audio. Reported by the C code.
     private volatile boolean playing = false;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable applyLmsVolumeTask = this::applyLmsVolume;
+    private int pendingLmsVolume = UNKNOWN_VOL;
     private int maxBitrate = 0;
     private boolean forgetOnStop = false;
     private volatile PlayerService service;
@@ -211,6 +217,8 @@ public class Library {
             context.getApplicationContext().getContentResolver().unregisterContentObserver(observer);
             observer = null;
         }
+        handler.removeCallbacks(applyLmsVolumeTask);
+        pendingLmsVolume = UNKNOWN_VOL;
         stop();
         try {
             // Allow C code a little while to stop...
@@ -279,32 +287,52 @@ public class Library {
             lmsVolumeReceived = vol;
             int aVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
             Utils.debug("left:"+left+", right:"+right+", initialLmsVolSeen:"+initialLmsVolSeen+", vol:"+vol+", aVol:"+aVol+", playing:"+playing);
-            if (initialLmsVolSeen && !playing) {
-                // LMS fades its volume down to zero when pausing, and back up when resuming.
-                // Mirroring that onto the device would zero the media volume - silencing
-                // whatever else is playing - and the volume observer would then send that zero
-                // back to LMS, losing the volume it had. The real volume is received again, with
-                // playback running, at the end of the resume fade.
-                Utils.debug("Not playing, so ignore");
+            if (!initialLmsVolSeen) {
+                initialLmsVolSeen = true;
+                // If android media volume<=0 then use LMS's, even for initial...
+                if (aVol<=0) {
+                    setDeviceVolume(vol);
+                } else {
+                    // C code has connected to LMS, LMS indicates initial volume, but override with
+                    // device's current volume...
+                    Utils.debug("First, aVol:"+aVol);
+                    androidVolume = UNKNOWN_VOL;
+                    volumeChanged();
+                }
                 return;
             }
-            // If android media volume<=0 then use LMS's, even for initial...
-            if (initialLmsVolSeen || aVol<=0) {
-                float pc = mapToPercent(vol);
-                aVol = (int)Math.ceil(pc*androidMaxVolume);
-                Utils.debug("aVol:"+aVol+", androidVolume:"+androidVolume);
-                if (aVol!=androidVolume) {
-                    androidVolume = aVol;
-                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, aVol, 0);
-                }
-            } else {
-                // C code has connected to LMS, LMS indicates initial volume, but override with
-                // device's current volume...
-                Utils.debug("First, aVol:"+aVol);
-                androidVolume = UNKNOWN_VOL;
-                volumeChanged();
-            }
-            initialLmsVolSeen = true;
+            // Do not act on this straight away. LMS fades its volume down when pausing, and back
+            // up when resuming, by sending a burst of volumes. Each one replaces the decision made
+            // for the previous, so a whole fade is settled once, below - by which time a pause has
+            // reached us and the fade is discarded.
+            pendingLmsVolume = vol;
+            handler.removeCallbacks(applyLmsVolumeTask);
+            handler.postDelayed(applyLmsVolumeTask, LMS_VOLUME_SETTLE_TIME);
+        }
+    }
+
+    /** Act on the last volume LMS sent, unless it was a fade to a pause. */
+    private synchronized void applyLmsVolume() {
+        if (!playing || UNKNOWN_VOL==pendingLmsVolume || null==audioManager) {
+            // Playback stopped or paused, so this was LMS fading its volume out. Leaving the
+            // device alone keeps the media volume - and any other app using it - as it was.
+            // LMS itself does not lose the volume, it sends the steps of a fade as temporary
+            // ones, so its own setting is still there to be restored on resume.
+            Utils.debug("Not playing, so ignore " + pendingLmsVolume);
+            pendingLmsVolume = UNKNOWN_VOL;
+            return;
+        }
+        int vol = pendingLmsVolume;
+        pendingLmsVolume = UNKNOWN_VOL;
+        setDeviceVolume(vol);
+    }
+
+    private void setDeviceVolume(int lmsVolume) {
+        int aVol = (int)Math.ceil(mapToPercent(lmsVolume)*androidMaxVolume);
+        Utils.debug("aVol:"+aVol+", androidVolume:"+androidVolume);
+        if (aVol!=androidVolume) {
+            androidVolume = aVol;
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, aVol, 0);
         }
     }
 
@@ -315,6 +343,8 @@ public class Library {
             service.connectionStateChanged(address);
         }
         if (Utils.isEmpty(address)) {
+            handler.removeCallbacks(applyLmsVolumeTask);
+            pendingLmsVolume = UNKNOWN_VOL;
             initialLmsVolSeen = false;
             lmsVolumeReceived = UNKNOWN_VOL;
             lmsVolumeSent = UNKNOWN_VOL;
