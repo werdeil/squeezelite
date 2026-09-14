@@ -73,6 +73,8 @@ public class Library {
     private int lmsVolumeSent = UNKNOWN_VOL;
     private long lmsVolumeSendTime;
     private int volumeControl = VOL_SEP;
+    // Whether the player is outputting audio. Reported by the C code.
+    private volatile boolean playing = false;
     private int maxBitrate = 0;
     private boolean forgetOnStop = false;
     private volatile PlayerService service;
@@ -276,7 +278,16 @@ public class Library {
             }
             lmsVolumeReceived = vol;
             int aVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-            Utils.debug("left:"+left+", right:"+right+", initialLmsVolSeen:"+initialLmsVolSeen+", vol:"+vol+", aVol:"+aVol+", initialLmsVolSeen:"+initialLmsVolSeen);
+            Utils.debug("left:"+left+", right:"+right+", initialLmsVolSeen:"+initialLmsVolSeen+", vol:"+vol+", aVol:"+aVol+", playing:"+playing);
+            if (initialLmsVolSeen && !playing) {
+                // LMS fades its volume down to zero when pausing, and back up when resuming.
+                // Mirroring that onto the device would zero the media volume - silencing
+                // whatever else is playing - and the volume observer would then send that zero
+                // back to LMS, losing the volume it had. The real volume is received again, with
+                // playback running, at the end of the resume fade.
+                Utils.debug("Not playing, so ignore");
+                return;
+            }
             // If android media volume<=0 then use LMS's, even for initial...
             if (initialLmsVolSeen || aVol<=0) {
                 float pc = mapToPercent(vol);
@@ -344,6 +355,7 @@ public class Library {
     @Keep
     public void playbackStateChanged(boolean playing) {
         Utils.debug("playing:"+playing);
+        this.playing = playing;
         PlayerService svc = service;
         if (null!=svc) {
             svc.playbackStateChanged(playing);
