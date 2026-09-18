@@ -74,6 +74,7 @@ public class PlayerService extends Service {
     private MediaSessionCompat.Callback mediaSessionCallback;
     private volatile NowPlaying nowPlaying;
     private volatile AudioFocus audioFocus;
+    private volatile CarConnection carConnection;
 
     public PlayerService() {
         handler = new Handler(Looper.getMainLooper());
@@ -254,6 +255,11 @@ public class PlayerService extends Service {
         if (Prefs.get(this).getBoolean(Prefs.AUDIO_FOCUS_KEY, Prefs.DEFAULT_AUDIO_FOCUS)) {
             audioFocus = new AudioFocus(this, lib);
         }
+        if (Prefs.get(this).getBoolean(Prefs.AUTOSTART_ANDROID_AUTO_KEY, false)) {
+            // Stop when the car does, as the player would otherwise carry on out of the phone
+            carConnection = new CarConnection(this, this::stopForegroundService);
+            carConnection.start();
+        }
 
         mediaSession = new MediaSessionCompat(getApplicationContext(), "Squeezelite");
         if (mediaSessionCallback==null) {
@@ -366,6 +372,10 @@ public class PlayerService extends Service {
         if (null!=audioFocus) {
             audioFocus.release();
             audioFocus = null;
+        }
+        if (null!=carConnection) {
+            carConnection.release();
+            carConnection = null;
         }
         lib.stopPlayer(this);
         if (mediaSession != null) {

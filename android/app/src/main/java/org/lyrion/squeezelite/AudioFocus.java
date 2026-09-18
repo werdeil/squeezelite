@@ -21,11 +21,9 @@
 package org.lyrion.squeezelite;
 
 import android.content.Context;
-import android.database.Cursor;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -45,11 +43,6 @@ import android.os.Looper;
  * only Android Auto starting up.
  */
 public class AudioFocus {
-    // Android Auto publishes its connection state here. 0 is not connected, 1 is Android
-    // Automotive, 2 is a projected session. See androidx.car.app.connection.CarConnection.
-    private static final Uri CAR_CONNECTION_URI = Uri.parse("content://androidx.car.app.connection");
-    private static final String CAR_CONNECTION_STATE = "CarConnectionState";
-    private static final int NOT_CONNECTED = 0;
     // How long to wait after a permanent loss before deciding what caused it
     private static final long RECLAIM_DELAY = 1500;
 
@@ -110,7 +103,7 @@ public class AudioFocus {
             return;
         }
         new Thread(() -> {
-            int state = carConnectionState();
+            int state = CarConnection.state(context);
             handler.post(() -> onCarConnectionState(state));
         }).start();
     }
@@ -120,7 +113,7 @@ public class AudioFocus {
             return;
         }
         pausedByLoss = false;
-        if (NOT_CONNECTED == state) {
+        if (CarConnection.NOT_CONNECTED == state) {
             Utils.debug("Focus lost to another app");
             return;
         }
@@ -128,21 +121,6 @@ public class AudioFocus {
         acquire();
         if (haveFocus) {
             lib.play();
-        }
-    }
-
-    private int carConnectionState() {
-        try (Cursor cursor = context.getContentResolver().query(CAR_CONNECTION_URI,
-                new String[]{CAR_CONNECTION_STATE}, null, null, null)) {
-            if (null == cursor) {
-                return NOT_CONNECTED;
-            }
-            int col = cursor.getColumnIndex(CAR_CONNECTION_STATE);
-            return col < 0 || !cursor.moveToNext() ? NOT_CONNECTED : cursor.getInt(col);
-        } catch (Exception e) {
-            // Android Auto is not installed, or is too old to publish its state
-            Utils.debug("Car connection state unavailable");
-            return NOT_CONNECTED;
         }
     }
 

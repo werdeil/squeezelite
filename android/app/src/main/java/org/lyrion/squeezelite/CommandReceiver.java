@@ -66,8 +66,8 @@ public class CommandReceiver extends BroadcastReceiver {
      * what Android Auto itself asks for when a session starts, so that is used as the trigger.
      *
      * Only connections are acted on. Android Auto drops and remakes the hands-free link during a
-     * session, so a disconnect says nothing about whether the car is still there. Losing the
-     * server stops the player soon enough once out of range.
+     * session, so a disconnect says nothing about whether the car is still there. The end of a
+     * session is watched for by CarConnection instead, which stops the player.
      */
     private void handleHandsFreeIntent(Context context, Intent intent) {
         if (!Prefs.get(context).getBoolean(Prefs.AUTOSTART_ANDROID_AUTO_KEY, false)) {
