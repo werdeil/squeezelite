@@ -73,6 +73,8 @@ public class PlayerService extends Service {
     private MediaSessionCompat mediaSession;
     private MediaSessionCompat.Callback mediaSessionCallback;
     private volatile NowPlaying nowPlaying;
+    private volatile AudioFocus audioFocus;
+    private volatile CarConnection carConnection;
 
     public PlayerService() {
         handler = new Handler(Looper.getMainLooper());
@@ -250,6 +252,14 @@ public class PlayerService extends Service {
         if (!Utils.isEmpty(playerName)) {
             updateNotification();
         }
+        if (Prefs.get(this).getBoolean(Prefs.AUTOSTART_ANDROID_AUTO_KEY, false)) {
+            // Stop when the car does, as the player would otherwise carry on out of the phone
+            carConnection = new CarConnection(this, this::stopForegroundService);
+            carConnection.start();
+        }
+        if (Prefs.get(this).getBoolean(Prefs.AUDIO_FOCUS_KEY, Prefs.DEFAULT_AUDIO_FOCUS)) {
+            audioFocus = new AudioFocus(this, lib, carConnection);
+        }
 
         mediaSession = new MediaSessionCompat(getApplicationContext(), "Squeezelite");
         if (mediaSessionCallback==null) {
@@ -359,6 +369,14 @@ public class PlayerService extends Service {
             nowPlaying.release();
             nowPlaying = null;
         }
+        if (null!=audioFocus) {
+            audioFocus.release();
+            audioFocus = null;
+        }
+        if (null!=carConnection) {
+            carConnection.release();
+            carConnection = null;
+        }
         lib.stopPlayer(this);
         if (mediaSession != null) {
             mediaSession.setActive(false);
@@ -366,12 +384,22 @@ public class PlayerService extends Service {
         }
     }
 
-    public void playbackStateChanged() {
-        Utils.debug("");
-        NowPlaying np = nowPlaying;
-        if (null!=np) {
-            handler.post(np::update);
-        }
+    public void playbackStateChanged(boolean playing) {
+        Utils.debug("playing:"+playing);
+        handler.post(() -> {
+            AudioFocus focus = audioFocus;
+            if (null!=focus) {
+                if (playing) {
+                    focus.request();
+                } else {
+                    focus.abandon();
+                }
+            }
+            NowPlaying np = nowPlaying;
+            if (null!=np) {
+                np.update();
+            }
+        });
     }
 
     public void trackChanged() {
@@ -401,8 +429,12 @@ public class PlayerService extends Service {
             startTerminateTimer(connectionLostTimeout);
         } else {
             stopTerminateTimer();
-            // Now that we know where the server is, read what it is playing
-            playbackStateChanged();
+            // Now that we know where the server is, read what it is playing. Whether it is
+            // playing is not known yet - the C code reports that once it has started output.
+            NowPlaying np = nowPlaying;
+            if (null!=np) {
+                handler.post(np::update);
+            }
         }
     }
 
