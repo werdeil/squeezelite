@@ -27,6 +27,7 @@ import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 /**
  * Holds Android audio focus whilst the player is outputting sound, and pauses the player when
@@ -38,30 +39,37 @@ import android.os.Looper;
  * expect from a media player.
  *
  * Android Auto takes permanent focus for itself when it starts, before any app has asked to
- * play. That is indistinguishable from another player taking over, so a permanent loss is not
- * acted upon immediately - the car connection is checked first, and focus reclaimed if it was
- * only Android Auto starting up.
+ * play. A permanent loss is therefore not always another player taking over, and is only treated
+ * as Android Auto starting up when a car session is both connected and new. Later on in a
+ * session, and a second time, the loss is what it appears to be and the player stays paused.
  */
 public class AudioFocus {
     // How long to wait after a permanent loss before deciding what caused it
     private static final long RECLAIM_DELAY = 1500;
+    // Android Auto asks for focus as a session comes up, so a loss later than this into one was
+    // caused by something else
+    private static final long STARTUP_WINDOW = 60000;
 
     private final Context context;
     private final AudioManager audioManager;
     private final Library lib;
+    private final CarConnection carConnection;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private AudioFocusRequest request = null;
     private boolean haveFocus = false;
     // Playback was paused because focus was lost, so should be resumed if it is regained
     private boolean pausedByLoss = false;
+    // Android Auto only takes focus once, as it starts
+    private boolean reclaimed = false;
 
     private final AudioManager.OnAudioFocusChangeListener listener = this::onFocusChange;
     private final Runnable reclaimTask = this::reclaim;
 
-    public AudioFocus(Context context, Library lib) {
+    public AudioFocus(Context context, Library lib, CarConnection carConnection) {
         this.context = context.getApplicationContext();
         this.audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         this.lib = lib;
+        this.carConnection = carConnection;
     }
 
     private void onFocusChange(int focusChange) {
@@ -78,10 +86,14 @@ public class AudioFocus {
             case AudioManager.AUDIOFOCUS_LOSS:
                 // Android has dropped our request, so it can only come back by asking again
                 haveFocus = false;
-                pausedByLoss = true;
                 lib.pause();
                 handler.removeCallbacks(reclaimTask);
-                handler.postDelayed(reclaimTask, RECLAIM_DELAY);
+                pausedByLoss = mayBeCarStarting();
+                if (pausedByLoss) {
+                    handler.postDelayed(reclaimTask, RECLAIM_DELAY);
+                } else {
+                    Utils.debug("Another player has taken over");
+                }
                 break;
             case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
                 // e.g. phone call, or navigation prompt. Request stays registered, and Android
@@ -95,6 +107,24 @@ public class AudioFocus {
             default:
                 break;
         }
+    }
+
+    /**
+     * Whether a permanent loss could be Android Auto asking for focus as a session starts, rather
+     * than another player taking over. It only does so once, as the car comes up, so a loss into a
+     * session that has been running for a while is somebody else. Without a watcher there is no
+     * telling how old a session is, and the car connection checked below decides on its own.
+     */
+    private boolean mayBeCarStarting() {
+        if (reclaimed) {
+            return false;
+        }
+        if (null==carConnection) {
+            return true;
+        }
+        long since = carConnection.connectedSince();
+        // Nothing seen yet is a session only now coming up, which is the case this is here for
+        return 0==since || (SystemClock.elapsedRealtime()-since)<STARTUP_WINDOW;
     }
 
     /** Decide whether a permanent loss was Android Auto starting up, or a real takeover. */
@@ -118,6 +148,7 @@ public class AudioFocus {
             return;
         }
         Utils.debug("Focus lost as car connected (" + state + ") - reclaim");
+        reclaimed = true;
         acquire();
         if (haveFocus) {
             lib.play();

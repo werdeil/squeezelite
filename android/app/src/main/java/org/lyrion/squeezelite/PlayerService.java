@@ -252,13 +252,13 @@ public class PlayerService extends Service {
         if (!Utils.isEmpty(playerName)) {
             updateNotification();
         }
-        if (Prefs.get(this).getBoolean(Prefs.AUDIO_FOCUS_KEY, Prefs.DEFAULT_AUDIO_FOCUS)) {
-            audioFocus = new AudioFocus(this, lib);
-        }
         if (Prefs.get(this).getBoolean(Prefs.AUTOSTART_ANDROID_AUTO_KEY, false)) {
             // Stop when the car does, as the player would otherwise carry on out of the phone
             carConnection = new CarConnection(this, this::stopForegroundService);
             carConnection.start();
+        }
+        if (Prefs.get(this).getBoolean(Prefs.AUDIO_FOCUS_KEY, Prefs.DEFAULT_AUDIO_FOCUS)) {
+            audioFocus = new AudioFocus(this, lib, carConnection);
         }
 
         mediaSession = new MediaSessionCompat(getApplicationContext(), "Squeezelite");

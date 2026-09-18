@@ -26,6 +26,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 /**
  * Watches whether Android Auto is projecting, as published by its own content provider.
@@ -55,6 +56,8 @@ public class CarConnection {
     private ContentObserver observer = null;
     // Only a session that was seen running can end
     private boolean seenConnected = false;
+    // When the running session was first seen, or 0 if there is none
+    private long connectedSince = 0;
 
     /** Read the state Android Auto publishes. Queries a provider, so not for the main thread. */
     public static int state(Context context) {
@@ -69,6 +72,11 @@ public class CarConnection {
             Utils.debug("Car connection state unavailable");
             return NOT_CONNECTED;
         }
+    }
+
+    /** When the session now running was first seen, or 0 if none is. */
+    public long connectedSince() {
+        return connectedSince;
     }
 
     public CarConnection(Context context, Runnable onSessionEnded) {
@@ -125,25 +133,35 @@ public class CarConnection {
         }
         Utils.debug("state:"+state+", seenConnected:"+seenConnected+", confirming:"+confirming);
         if (NOT_CONNECTED!=state) {
-            seenConnected = true;
+            if (!seenConnected) {
+                seenConnected = true;
+                connectedSince = SystemClock.elapsedRealtime();
+            }
             handler.removeCallbacks(confirmTask);
-            handler.removeCallbacks(pollTask);
-            handler.postDelayed(pollTask, POLL_INTERVAL);
+            schedulePoll();
             return;
         }
         if (!seenConnected) {
+            // Keep asking, so that a session is noticed even if the provider tells nobody
+            schedulePoll();
             return;
         }
         if (confirming) {
             Utils.info("Android Auto session ended");
             seenConnected = false;
+            connectedSince = 0;
             handler.removeCallbacks(pollTask);
             onSessionEnded.run();
-        } else {
-            // Ask again shortly, so that a blip during a session does not stop the player
-            handler.removeCallbacks(confirmTask);
-            handler.postDelayed(confirmTask, CONFIRM_DELAY);
+            return;
         }
+        // Ask again shortly, so that a blip during a session does not stop the player
+        handler.removeCallbacks(confirmTask);
+        handler.postDelayed(confirmTask, CONFIRM_DELAY);
+    }
+
+    private void schedulePoll() {
+        handler.removeCallbacks(pollTask);
+        handler.postDelayed(pollTask, POLL_INTERVAL);
     }
 
     private void confirm() {
