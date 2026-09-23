@@ -26,6 +26,9 @@
 #include <jni.h>
 #include <signal.h>
 
+extern struct outputstate output;
+extern struct buffer *outputbuf;
+
 static JavaVM *jvm = NULL;
 static jclass clazz = 0;
 static jobject obj = 0;
@@ -47,6 +50,28 @@ static void sighandler(int signum) {
 static void segv_handler(int sig) {
 	LOG_ERROR("SEGV/ABRT!");
 	exit(0);
+}
+
+// Squeezelite's state is process wide, so only one player may use it at a time.
+static pthread_mutex_t instance_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t instance_cond = PTHREAD_COND_INITIALIZER;
+static bool instance_active = false;
+
+// Called on the player thread, never the UI thread.
+static void instance_acquire(void) {
+	pthread_mutex_lock(&instance_mutex);
+	while (instance_active) {
+		pthread_cond_wait(&instance_cond, &instance_mutex);
+	}
+	instance_active = true;
+	pthread_mutex_unlock(&instance_mutex);
+}
+
+static void instance_release(void) {
+	pthread_mutex_lock(&instance_mutex);
+	instance_active = false;
+	pthread_cond_signal(&instance_cond);
+	pthread_mutex_unlock(&instance_mutex);
 }
 
 static void init_jvm(JNIEnv * env, jobject jobj) {
@@ -105,6 +130,11 @@ void send_playback_state_to_app(void) {
 	if (!jvm || !obj || !clazz) {
 		return;
 	}
+	// Callers do not hold the output lock
+	mutex_lock(outputbuf->mutex);
+	bool playing = output.state != OUTPUT_OFF && output.state != OUTPUT_STOPPED;
+	mutex_unlock(outputbuf->mutex);
+
 	JNIEnv *env;
 	bool detached = JNI_EDETACHED == (*jvm)->GetEnv(jvm, &env, JNI_VERSION_1_6);
 	if (detached) {
@@ -113,9 +143,9 @@ void send_playback_state_to_app(void) {
 			return;
 		}
 	}
-	jmethodID method = (*env)->GetMethodID(env, clazz, "playbackStateChanged", "()V");
+	jmethodID method = (*env)->GetMethodID(env, clazz, "playbackStateChanged", "(Z)V");
 	if (method) {
-		(*env)->CallVoidMethod(env, obj, method);
+		(*env)->CallVoidMethod(env, obj, method, (jboolean)(playing ? JNI_TRUE : JNI_FALSE));
 	} else {
 		// A failed GetMethodID leaves an exception pending, and the next JNI call from this
 		// thread would then abort the VM. Happens if the native library is newer than the java.
@@ -174,6 +204,8 @@ JNIEXPORT void JNICALL Java_org_lyrion_squeezelite_Library_start(JNIEnv *env, jo
 	log_level log_stream = loglevel;
 	log_level log_decode = loglevel;
 	log_level log_slimproto = loglevel;
+
+	instance_acquire();
 
 	if (LibAAudio_init()) {
 		PaOpenSLES_ENABLED = 0;
@@ -251,6 +283,8 @@ JNIEXPORT void JNICALL Java_org_lyrion_squeezelite_Library_start(JNIEnv *env, jo
 #if USE_SSL && !LINKALL && !NO_SSLSYM
 	free_ssl_symbols();
 #endif
+
+	instance_release();
 
 	(*env)->ReleaseStringUTFChars(env, lms_param, server);
 	(*env)->ReleaseStringUTFChars(env, mac_param, mac_str);
