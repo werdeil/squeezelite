@@ -37,6 +37,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class JsonRpc {
+    // For the reply awaited as the player exits
+    private static final int QUICK_TIMEOUT = 100;
+    private static final int QUICK_RETRIES = 1;
+    // Allows for wifi coming out of power saving
+    public static final int REPLY_TIMEOUT = 2500;
+    public static final int REPLY_RETRIES = 2;
+
     private final RequestQueue requestQueue;
     private ServerDiscovery.Server server;
     private final String mac;
@@ -84,6 +91,10 @@ public class JsonRpc {
     }
 
     public void sendMessage(String[] command, Response.Listener<JSONObject> responseListener) {
+        sendMessage(command, responseListener, QUICK_TIMEOUT, QUICK_RETRIES);
+    }
+
+    public void sendMessage(String[] command, Response.Listener<JSONObject> responseListener, int timeout, int retries) {
         try {
             JSONObject request = new JSONObject();
             JSONArray params = new JSONArray();
@@ -100,7 +111,7 @@ public class JsonRpc {
             Utils.info("MSG:" + request);
             Request req = new Request("http://" + server.ip + ":" + server.port + "/jsonrpc.js", request, responseListener);
             if (null!=responseListener) {
-                req.setRetryPolicy(new DefaultRetryPolicy(100, 1, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT));
+                req.setRetryPolicy(new DefaultRetryPolicy(timeout, retries, DefaultRetryPolicy.DEFAULT_BACKOFF_MULT));
             }
             requestQueue.add(req);
         } catch (Exception e) {

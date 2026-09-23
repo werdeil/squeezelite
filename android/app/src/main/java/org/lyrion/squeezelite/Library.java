@@ -427,7 +427,7 @@ public class Library {
             listener.onResponse(null);
             return;
         }
-        jsonRpc.sendMessage(new String[]{"status", "-", "1", tags}, listener);
+        jsonRpc.sendMessage(new String[]{"status", "-", "1", tags}, listener, JsonRpc.REPLY_TIMEOUT, JsonRpc.REPLY_RETRIES);
     }
 
     public void fetchImage(String url, int maxSize, Response.Listener<Bitmap> listener) {
