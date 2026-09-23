@@ -45,6 +45,8 @@ public class NowPlaying {
     // If LMS still reports the previous track then try again after this long
     private static final long RETRY_DELAY = 1500;
     private static final int MAX_RETRIES = 2;
+    private static final long FIRST_FAILURE_DELAY = 2000;
+    private static final long MAX_FAILURE_DELAY = 30000;
     private static final long REMOTE_POLL_INTERVAL = 30000;
     // Keep the artwork small enough to comfortably fit through a binder transaction
     private static final int MAX_COVER_SIZE = 384;
@@ -57,6 +59,7 @@ public class NowPlaying {
 
     private boolean released = false;
     private int retries = 0;
+    private long failureDelay = 0;
     private String trackKey = null;
     private int state = PlaybackStateCompat.STATE_NONE;
     private boolean remoteStream = false;
@@ -106,9 +109,10 @@ public class NowPlaying {
         JSONObject result = null==response ? null : response.optJSONObject("result");
         if (null==result) {
             Utils.warn("No status received from server");
-            scheduleNext(true);
+            retryAfterFailure();
             return;
         }
+        failureDelay = 0;
 
         String mode = result.optString("mode", "stop");
         JSONArray loop = result.optJSONArray("playlist_loop");
@@ -191,6 +195,15 @@ public class NowPlaying {
         handler.removeCallbacks(queryTask);
         if (delay>0 && !released) {
             handler.postDelayed(queryTask, delay);
+        }
+    }
+
+    private void retryAfterFailure() {
+        failureDelay = 0==failureDelay ? FIRST_FAILURE_DELAY : Math.min(failureDelay*2, MAX_FAILURE_DELAY);
+        Utils.debug("Ask again in " + failureDelay + "ms");
+        handler.removeCallbacks(queryTask);
+        if (!released) {
+            handler.postDelayed(queryTask, failureDelay);
         }
     }
 
