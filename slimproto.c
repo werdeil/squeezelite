@@ -1074,4 +1074,5 @@ void slimproto_stop(void) {
 	send_packet((u8_t *)msg, 5);
 #endif
 	running = false;
+	wake_controller();
 }
