@@ -25,6 +25,8 @@
 #include "squeezelite.h"
 #include <jni.h>
 #include <signal.h>
+#include <dlfcn.h>
+#include <unwind.h>
 
 extern struct outputstate output;
 extern struct buffer *outputbuf;
@@ -44,11 +46,47 @@ static void sighandler(int signum) {
 	signal(signum, SIG_DFL);
 }
 
+struct unwind_state {
+	void **frame;
+	void **end;
+};
+
+static _Unwind_Reason_Code unwind_frame(struct _Unwind_Context *context, void *arg) {
+	struct unwind_state *state = arg;
+	uintptr_t pc = _Unwind_GetIP(context);
+	if (pc) {
+		if (state->frame == state->end) {
+			return _URC_END_OF_STACK;
+		}
+		*state->frame++ = (void *)pc;
+	}
+	return _URC_NO_REASON;
+}
+
+// Exiting below means no tombstone is written, so this is the only stack there will be.
+static void log_backtrace(void) {
+	void *frames[32];
+	struct unwind_state state = { frames, frames + 32 };
+	_Unwind_Backtrace(unwind_frame, &state);
+	for (void **frame = frames; frame < state.frame; ++frame) {
+		Dl_info info;
+		if (dladdr(*frame, &info) && info.dli_fname) {
+			LOG_ERROR("  #%02d pc %08lx  %s (%s)", (int)(frame - frames), (unsigned long)((uintptr_t)*frame - (uintptr_t)info.dli_fbase),
+					  info.dli_fname, info.dli_sname ? info.dli_sname : "?");
+		} else {
+			LOG_ERROR("  #%02d pc %p", (int)(frame - frames), *frame);
+		}
+	}
+}
+
 /**
  Catch SEGV, log, and exit (normally). This is to prevent Android showing errors when stopping.
  */
 static void segv_handler(int sig) {
 	LOG_ERROR("SEGV/ABRT!");
+	if (SIGABRT == sig) {
+		log_backtrace();
+	}
 	exit(0);
 }
 
