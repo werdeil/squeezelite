@@ -1005,11 +1005,14 @@ void slimproto(log_level level, char *server, u8_t mac[6], const char *name, con
 				LOG_INFO("new server not reachable, reverting to previous server %s:%d", inet_ntoa(serv_addr.sin_addr), ntohs(serv_addr.sin_port));
 			} else {
 				LOG_INFO("unable to connect to server %u", failed_connect);
-				sleep(5);
+				// wait before retrying, but not once asked to stop
+				for (i = 0; i < 50 && running; ++i) {
+					usleep(100000);
+				}
 			}
 
 			// rediscover server if it was not set at startup
-			if (!server && ++failed_connect > 5) {
+			if (running && !server && ++failed_connect > 5) {
 				slimproto_ip = serv_addr.sin_addr.s_addr = discover_server(NULL);
 			}
 
