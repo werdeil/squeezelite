@@ -80,7 +80,7 @@ public class CommandReceiver extends BroadcastReceiver {
             Utils.debug("Not a configured BT MAC");
             return;
         }
-        // A device that also connects for audio is (re)started by the A2DP handling
+        // Whichever of this and the A2DP connection comes first starts the player
         if (!Utils.isPlayerRunning(context)) {
             startService(context);
         }
@@ -128,12 +128,13 @@ public class CommandReceiver extends BroadcastReceiver {
             return;
         }
 
-        if (Utils.isPlayerRunning(context)) {
-            context.stopService(new Intent(context, PlayerService.class));
-        }
-
         if (connected) {
-            startService(context);
+            // Left alone if already running, as restarting in the same process is what crashes
+            if (!Utils.isPlayerRunning(context)) {
+                startService(context);
+            }
+        } else if (Utils.isPlayerRunning(context)) {
+            context.stopService(new Intent(context, PlayerService.class));
         }
     }
 
