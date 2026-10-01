@@ -100,6 +100,11 @@ public class CommandReceiver extends BroadcastReceiver {
         }
         boolean connected = BluetoothProfile.STATE_CONNECTED == state;
 
+        if (!connected && isOtherConfiguredDeviceConnected(context, macAddress)) {
+            Utils.debug("Another configured BT device is still connected");
+            return;
+        }
+
         if (!connected && Prefs.get(context).getBoolean(Prefs.AUTOSTOP_BT_KEY, false)) {
             PlayerService.stop(context);
             return;
@@ -134,6 +139,11 @@ public class CommandReceiver extends BroadcastReceiver {
         } else {
             PlayerService.stop(context);
         }
+    }
+
+    private boolean isOtherConfiguredDeviceConnected(Context context, String macAddress) {
+        Set<String> macs = Prefs.get(context).getStringSet(Prefs.BT_MAC_ADDRESSES_KEY, null);
+        return null!=macs && !macs.isEmpty() && null!=Utils.getConnectedDevice(context, macs, macAddress);
     }
 
     private void startOnBoot(Context context) {
